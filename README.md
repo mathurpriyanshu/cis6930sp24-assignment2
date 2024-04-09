@@ -1,8 +1,7 @@
-
 Name: Priyanshu Mathur
 
 # Assignment Description
-This Assignment is that we need to perform data augmentation on the extracted records from the previous assignment. To perform augmentation we will need to keep fairness and bias issues in mind.
+This Assignment is that we need to perform data augmentation on the extracted records from the previous assignment. To perform augmentation we will need to keep fairness and bias issues in mind. The task is to form a comprehensive pipeline for downloading, processing, augmenting, and storing incident data from PDFs sourced from URLs.
 
 
 # How to install
@@ -11,9 +10,8 @@ This Assignment is that we need to perform data augmentation on the extracted re
 $ git clone https://github.com/mathurpriyanshu/cis6930sp24-assignment2.git
 
     
-
 2. Install prerequisites:
-$ pipenv install pandas geopy
+$ pipenv install
 
 
 # How to run
@@ -25,51 +23,53 @@ pipenv run python assignment2.py --urls <filename>
 
 # Functions
 
+1. **`pdf_download(url)`**: This function downloads a PDF from a specified URL using HTTP GET, setting a user-agent header to mimic a browser request. It saves the PDF locally and returns the path to the downloaded file.
 
-1. `main(urls_file)`: This function serves as the entry point of the script. It takes a file containing a list of incident URLs as input. It extracts data from each PDF file corresponding to the URLs, performs data augmentation on the extracted data, and prints the augmented data in a tab-separated format. It integrates the functionalities of other functions to achieve this.
+2. **`data_extract(pdf_path)`**: Extracts text from a given PDF file path. It uses the `pypdf.PdfReader` to read PDF pages and extracts text assuming a layout mode. It processes and returns data based on the text extracted from all pages.
 
-2. `pdf_download(url)`: This function downloads a PDF file from a given URL. It uses `urllib.request.urlopen()` to fetch the PDF content and saves it locally. It returns the local file path where the PDF is saved.
+3. **`determine_day_of_week(date_str)`**: Converts a date string into a `datetime` object and returns the weekday as an integer, where Monday is 1 and Sunday is 7.
 
-3. `data_extract(pdf_path)`: This function extracts data from a given PDF file. It uses `PyPDF2` to read the PDF content and extract text from each page. Then, it processes the text to extract incident-related information such as date/time, incident number, location, nature, etc. It returns a list of dictionaries, where each dictionary represents an incident record.
+4. **`determine_time_of_day(date_str)`**: Parses a datetime string to find the hour of the day (0-23), representing the time of day.
 
-4. `determine_side_of_town(location)`: This function determines the side of town based on the location coordinates. It uses `geopy` to obtain the coordinates of the town center and compares them with the coordinates of the incident location to determine the side (N, S, E, W, NW, NE, SW, SE).
+5. **`determine_weather(latitude, longitude, time)`**: Fetches weather conditions using an API by providing geographic coordinates and a timestamp. Handles API responses and errors, returning weather conditions or an error message.
 
-5. `rank_locations(locations)`: This function ranks the locations based on their frequency in the dataset. It uses `Counter` from the `collections` module to count the occurrences of each location and assigns a rank accordingly.
+6. **`rank_locations(locations)`**: Ranks locations based on their frequency of occurrence using a `Counter` from the collections module, assigning a rank to each unique location.
 
-6. `augment_data(data)`: This function performs data augmentation on the extracted incident data. It takes the extracted data as input and augments it according to the specifications provided in the assignment. For demonstration purposes, it currently returns dummy augmented data.
+7. **`determine_side_of_town(location)`**: Uses the `Nominatim` service to geocode a location name and determines if it is within a central area or outside, based on a set radius.
 
-These functions collectively handle the extraction, processing, augmentation, and printing of incident data from PDF files based on the provided URLs.
+8. **`rank_incidents(natures)`**: Ranks incident natures by frequency using a `Counter`, similarly to location ranking.
 
+9. **`augment_data(data)`**: Augments incident records with additional attributes such as day of the week, time of day, weather conditions, location and incident ranks, and whether the incident type matches 'EMSSTAT'.
 
+10. **`db_population(augmented_data)`**: Populates a SQLite database with the augmented incident data, handling database connection, table creation, and data insertion.
 
+11. **`main(url)`**: Orchestrates the download, extraction, augmentation, and database population processes for incident data from a given URL.
 
+ 
+## Bugs
 
+1. **Error Handling**: Functions like `pdf_download` and `data_extract` may not handle all potential errors, such as network issues or corrupt PDF files, which can cause the program to crash.
+2. **Database Transactions**: The `db_population` function lacks proper transaction management. If an error occurs during the insertion of records, it might partially commit data, leading to inconsistent database states.
+3. **Date Parsing**: The `determine_day_of_week` and `determine_time_of_day` functions assume the date format is always correct and does not handle parsing errors which could occur if the input format varies.
+4. **Weather API Dependency**: The `determine_weather` function assumes that the API will always return a 200 status and the expected weather data format. If the API changes or the network is down, this could result in unhandled exceptions or incorrect data handling.
+5. **Geocoding Limitations**: The `determine_side_of_town` function may fail if the Nominatim service cannot find the location or if the API rate limits are exceeded.
 
-# Bugs
+## Assumptions
+1. **PDF Text Extraction**: It is assumed that the text extraction from PDFs will always be accurate and that the layout mode sufficiently captures the data needed without formatting issues.
+2. **Data Structure Consistency**: The data extraction logic assumes a consistent format in the text data, which may not always be the case, leading to incorrect parsing and data extraction.
+3. **Stable Internet Connection**: The code assumes that the internet connection is stable and that the external APIs (weather, geocoding) will always be reachable and responsive.
+4. **API Key and Limits**: The script assumes that a valid API key is available for the weather data API and that the request does not exceed the API's usage limits.
+5. **Database Schema**: Assumes that the SQLite database schema does not change and that the table creation script correctly reflects the data structure used in the code.
 
-1. Error Handling: The code lacks robust error handling mechanisms. If there are issues with downloading PDFs, extracting data, or performing data augmentation, the script may fail without providing clear error messages.
-2. PDF Parsing Issues: The code relies on PyPDF2 for PDF parsing, which may not handle all PDF formats perfectly. There could be cases where the extraction of text from PDFs may fail or produce incorrect results.
-3. URL File Handling: The code assumes that the URLs file provided via the `--urls` option is properly formatted and contains valid URLs. If the file format is incorrect or URLs are malformed, it may cause unexpected behavior.
-4. PDF File Deletion: The code deletes PDF files immediately after extracting data. If the subsequent data augmentation process fails, there's no way to re-extract data from the PDFs without downloading them again.
-
-
-# Assumptions
-1. Data Structure: The data extraction assumes a specific structure/format of incident data within the PDF files. If the structure/format varies across different PDFs, the extraction process may fail or produce inaccurate results.
-2. Side of Town Determination: The function `determine_side_of_town()` assumes a simplistic approach to determine the side of town based on coordinates. It considers only cardinal directions (N, S, E, W) and divides the town into quadrants. This may not accurately represent the actual side of town in more complex geographic layouts.
-3. Data Augmentation Logic: The `augment_data()` function currently returns dummy augmented data for demonstration purposes. The actual data augmentation logic based on the provided specifications is missing. Implementing the correct logic based on the specifications is crucial for generating meaningful augmented data.
-4. Geolocation Accuracy: The code assumes that geolocation services (e.g., Nominatim) provide accurate results for determining the town center's coordinates. In practice, the accuracy of geolocation services may vary, leading to inaccuracies in determining the side of town.
+To mitigate these issues, the code should include comprehensive error handling and validation checks to ensure that it can gracefully handle unexpected situations and input variations.
 
 # Test Function Description
 
+1. **`test_pdf_download`** verifies that the PDF download function can retrieve a file from a specified URL and save it correctly.
+2. **`test_data_extract`** ensures that text extraction from a PDF works as intended, returning a list of data extracted from the document.
+3. **`test_determine_day_of_week`** and **`test_determine_time_of_day`** test the correct parsing and computation of the day of the week and the hour from a given date-time string.
+4. **`test_determine_weather`** checks the function that fetches weather data for given coordinates and time, ensuring it handles API interactions correctly.
+5. **`test_rank_locations`** tests whether the location ranking system accurately assigns ranks based on the frequency of location occurrences.
+6. **`test_determine_side_of_town`** assesses the geolocation function's ability to categorize a location as being in the center or outside of a predefined area.
 
-1. **test_pdf_download**: This test function would verify that PDF files can be downloaded from provided URLs successfully. It would simulate different scenarios such as valid URLs, invalid URLs, network errors, and ensure that appropriate error handling is in place.
 
-2. **test_data_extraction**: This function would test the data extraction process from PDF files. It would use sample PDF files with known content and verify that the extraction function correctly parses and extracts incident data. Test cases would cover various scenarios such as single-page PDFs, multi-page PDFs, different text layouts, and edge cases.
-
-3. **test_side_of_town_determination**: This test function would validate the accuracy of the `determine_side_of_town()` function. It would provide known coordinates representing different sides of town and verify that the function correctly assigns the corresponding side (N, S, E, W, NW, NE, SW, SE).
-
-4. **test_rank_locations**: This function would test the accuracy of the `rank_locations()` function. It would provide a sample list of locations with known frequencies and verify that the function ranks them correctly based on frequency. Test cases would include locations with different frequencies and ties.
-
-5. **test_augment_data**: This test function would validate the data augmentation process. It would compare the augmented data generated by the `augment_data()` function against expected results based on known input data and specifications. Test cases would cover different combinations of incident data and expected augmented attributes.
-
-6. **test_integration**: This function would perform end-to-end testing of the entire workflow, from downloading PDFs to printing augmented data. It would use sample input URLs, mock PDF files, and expected augmented data to validate the entire process. This test would ensure that all components work together correctly.

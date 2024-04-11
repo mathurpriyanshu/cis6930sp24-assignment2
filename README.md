@@ -106,8 +106,6 @@ These test functions are located in the `tests/` directory and can be executed t
 - **Reliability:** The script has undergone thorough testing to ensure its reliability. However, due to the complexity of real-world data, there may be unforeseen issues that could arise. Users are encouraged to test the script with their data and provide feedback for continuous improvement.
 
 ## Bugs
-Here are some bugs and potential issues in the provided code:
-
 - **Non-Robust Error Handling**:
    - The `pdf_download` function does not check the status code of the HTTP response, which can result in attempting to write non-PDF content if the URL is incorrect or the server responds with an error.
    - The `data_extract` function assumes that the first page of the PDF will always have the correct format and sufficient data for processing, which might not be the case. It also deletes the first three and the last line of `incidents` unconditionally, which could result in errors if the data structure is different.

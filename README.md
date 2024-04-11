@@ -1,75 +1,127 @@
+
+# CIS 6930, Spring 2024 Assignment 2 - Augmenting Data
+
+## Author
 Name: Priyanshu Mathur
 
-# Assignment Description
-This Assignment is that we need to perform data augmentation on the extracted records from the previous assignment. To perform augmentation we will need to keep fairness and bias issues in mind. The task is to form a comprehensive pipeline for downloading, processing, augmenting, and storing incident data from PDFs sourced from URLs.
+
+## Introduction
+This Python script performs data augmentation on police incident records extracted from PDF files. It enriches the dataset with additional information like day of the week, time of day, weather conditions, etc. The augmented data can be used for deeper analysis and preparation for further processing in a data pipeline.
+## Running Instructions
+To execute the data augmentation script (`assignment2.py`), follow the steps below.
+
+1. **Setup Environment:**  
+   Ensure Python 11 or newer is installed along with `pipenv` for handling virtual environments and dependencies.
+   ```bash
+   pip install pipenv
+   ```
+
+2. **Install Dependencies:**  
+   Navigate to the project directory and install dependencies using:
+   ```bash
+   pipenv install
+   ```
+
+3. **Activate Virtual Environment:**  
+   Activate the virtual environment with:
+   ```bash
+   pipenv shell
+   ```
+   Alternatively, use `pipenv run` before commands to run them directly within the virtual environment.
+
+4. **Execute the Script:**  
+   Use the following command to run `assignment2.py`:
+   ```bash
+   pipenv run python assignment2.py --urls files.csv
+   ```
+   Replace `<Path to CSV file with URLs>` with the actual file path. This CSV file should contain URLs to the PDFs of incident reports.
+
+## Dependencies
+
+- `argparse`: For parsing command-line arguments.
+- `csv`: For reading CSV files.
+- `src`: Custom module for utility functions.
+- `requests`: For downloading files from URLs.
+- `pypdf`: For reading PDF files.
+- `os`: For interacting with the operating system.
+- `random`: For generating random values.
+- `base64`: For decoding the API key.
+- `collections.Counter`: For counting occurrences of elements in a list.
+- `geopy.geocoders.Photon`: For geocoding locations.
+- `math`: For mathematical operations.
+- `datetime.datetime`, `datetime.timedelta`: For working with dates and times.
+
+## Functionality
+
+The script provides the following functionalities for data augmentation:
+
+- **PDF Download (`pdf_download(url)`)**: Downloads a PDF file from a given URL and saves it locally.
+- **Data Extraction (`data_extract(pdf_path)`)**: Extracts incident records from a PDF file and cleans the data.
+- **Location Ranking (`rank_locations(incidents)`)**: Ranks incident locations based on their frequency.
+- **Day of Week and Time of Day Extraction (`get_day_of_week(date_time_str)`, `get_time_of_day(date_time_str)`)**: Extracts the day of the week and time of day from a date/time string.
+- **Weather Checking (`check_weather(api_key, date_time_str)`)**: Checks the weather conditions for a given date/time using the OpenWeatherMap API.
+- **Location Geocoding (`get_lat_lon_from_location(location_name)`)**: Geocodes a location name to latitude and longitude coordinates.
+- **Bearing Calculation and Side of Town Determination (`calculate_bearing(...)`, `determine_side_of_town(bearing)`)**: Calculates the bearing and determines the side of town for an incident location.
+- **Incident Nature Ranking (`calculate_incident_ranks(incidents)`)**: Assigns ranks to incident natures based on their frequency.
+- **EMS Status Checking (`check_emsstat(incident, incidents, current_index)`)**: Checks if an incident involves an EMS status.
+- **Data Augmentation (`augment_data(incidents, location_ranks, incident_ranks, api_key)`)**: Augments incident records with additional information.
+
+Additionally, the script includes utility functions for parsing CSV files to extract URLs of incident PDFs and for printing augmented data to stdout.
+
+Run:
+**(`python script.py --urls files.csv`)**
 
 
-# How to install
-1. Clone the repository on your system:
-    
-$ git clone https://github.com/mathurpriyanshu/cis6930sp24-assignment2.git
+## Test Descriptions
 
-    
-2. Install prerequisites:
-$ pipenv install
+### test_time.py
 
+- `test_get_day_of_week`: Tests the `get_day_of_week` function, which returns the numeric representation of the day of the week (1-7, where 1 is Sunday).
+- `test_get_time_of_day`: Tests the `get_time_of_day` function, which returns the hour of the day (0-24) the incident was reported.
 
-# How to run
-Branch to be used: main 
+### test_geo.py
 
-Command to run: 
+- `test_get_lat_lon_from_location`: Tests the `get_lat_lon_from_location` function, which returns the latitude and longitude coordinates of a given location.
+- `test_calculate_bearing`: Tests the `calculate_bearing` function, which calculates the bearing (compass direction) between two sets of coordinates.
+- `test_determine_side_of_town`: Tests the `determine_side_of_town` function, which determines the side of town (N, NE, E, SE, S, SW, W, NW) based on a given bearing.
 
-pipenv run python assignment2.py --urls <filename>
+### test_nature.py
 
-# Functions
+- `test_calculate_incident_ranks`: Tests the `calculate_incident_ranks` function, which calculates the rank of each incident's nature based on frequency.
+- `test_check_emsstat`: Tests the `check_emsstat` function, which checks if EMS (Emergency Medical Services) was dispatched for the current incident ORI or the next one or two records for the same time and location contain "EMSSTAT".
 
-1. **`pdf_download(url)`**: This function downloads a PDF from a specified URL using HTTP GET, setting a user-agent header to mimic a browser request. It saves the PDF locally and returns the path to the downloaded file.
+## Usage
 
-2. **`data_extract(pdf_path)`**: Extracts text from a given PDF file path. It uses the `pypdf.PdfReader` to read PDF pages and extracts text assuming a layout mode. It processes and returns data based on the text extracted from all pages.
+To run the tests, use a test runner such as pytest:
 
-3. **`determine_day_of_week(date_str)`**: Converts a date string into a `datetime` object and returns the weekday as an integer, where Monday is 1 and Sunday is 7.
+```bash
+pytest test_time.py
+pytest test_geo.py
+pytest test_nature.py
+```
 
-4. **`determine_time_of_day(date_str)`**: Parses a datetime string to find the hour of the day (0-23), representing the time of day.
+These test functions are located in the `tests/` directory and can be executed to verify the correctness of the respective functionalities.
 
-5. **`determine_weather(latitude, longitude, time)`**: Fetches weather conditions using an API by providing geographic coordinates and a timestamp. Handles API responses and errors, returning weather conditions or an error message.
-
-6. **`rank_locations(locations)`**: Ranks locations based on their frequency of occurrence using a `Counter` from the collections module, assigning a rank to each unique location.
-
-7. **`determine_side_of_town(location)`**: Uses the `Nominatim` service to geocode a location name and determines if it is within a central area or outside, based on a set radius.
-
-8. **`rank_incidents(natures)`**: Ranks incident natures by frequency using a `Counter`, similarly to location ranking.
-
-9. **`augment_data(data)`**: Augments incident records with additional attributes such as day of the week, time of day, weather conditions, location and incident ranks, and whether the incident type matches 'EMSSTAT'.
-
-10. **`db_population(augmented_data)`**: Populates a SQLite database with the augmented incident data, handling database connection, table creation, and data insertion.
-
-11. **`main(url)`**: Orchestrates the download, extraction, augmentation, and database population processes for incident data from a given URL.
-
- 
-## Bugs
-
-1. **Error Handling**: Functions like `pdf_download` and `data_extract` may not handle all potential errors, such as network issues or corrupt PDF files, which can cause the program to crash.
-2. **Database Transactions**: The `db_population` function lacks proper transaction management. If an error occurs during the insertion of records, it might partially commit data, leading to inconsistent database states.
-3. **Date Parsing**: The `determine_day_of_week` and `determine_time_of_day` functions assume the date format is always correct and does not handle parsing errors which could occur if the input format varies.
-4. **Weather API Dependency**: The `determine_weather` function assumes that the API will always return a 200 status and the expected weather data format. If the API changes or the network is down, this could result in unhandled exceptions or incorrect data handling.
-5. **Geocoding Limitations**: The `determine_side_of_town` function may fail if the Nominatim service cannot find the location or if the API rate limits are exceeded.
+## Reliability 
+- **Reliability:** The script has undergone thorough testing to ensure its reliability. However, due to the complexity of real-world data, there may be unforeseen issues that could arise. Users are encouraged to test the script with their data and provide feedback for continuous improvement.
 
 ## Assumptions
-1. **PDF Text Extraction**: It is assumed that the text extraction from PDFs will always be accurate and that the layout mode sufficiently captures the data needed without formatting issues.
-2. **Data Structure Consistency**: The data extraction logic assumes a consistent format in the text data, which may not always be the case, leading to incorrect parsing and data extraction.
-3. **Stable Internet Connection**: The code assumes that the internet connection is stable and that the external APIs (weather, geocoding) will always be reachable and responsive.
-4. **API Key and Limits**: The script assumes that a valid API key is available for the weather data API and that the request does not exceed the API's usage limits.
-5. **Database Schema**: Assumes that the SQLite database schema does not change and that the table creation script correctly reflects the data structure used in the code.
 
-To mitigate these issues, the code should include comprehensive error handling and validation checks to ensure that it can gracefully handle unexpected situations and input variations.
+- **PDF Format:** The script assumes that the incident reports are in a standard PDF format and can be parsed using the `PyPDF2` library. Any deviations from this format may cause parsing errors.
 
-# Test Function Description
+- **Data Integrity:** It is assumed that the incident reports provided are accurate and reliable. Any inconsistencies or errors in the reports may lead to incorrect data augmentation.
 
-1. **`test_pdf_download`** verifies that the PDF download function can retrieve a file from a specified URL and save it correctly.
-2. **`test_data_extract`** ensures that text extraction from a PDF works as intended, returning a list of data extracted from the document.
-3. **`test_determine_day_of_week`** and **`test_determine_time_of_day`** test the correct parsing and computation of the day of the week and the hour from a given date-time string.
-4. **`test_determine_weather`** checks the function that fetches weather data for given coordinates and time, ensuring it handles API interactions correctly.
-5. **`test_rank_locations`** tests whether the location ranking system accurately assigns ranks based on the frequency of location occurrences.
-6. **`test_determine_side_of_town`** assesses the geolocation function's ability to categorize a location as being in the center or outside of a predefined area.
+- **API Limitations:** The script assumes that there are no limitations or restrictions on the usage of external APIs, such as the OpenWeatherMap API, for weather data retrieval. Users should be aware of any API rate limits or access restrictions that may apply.
+
+- **Location Accuracy:** The accuracy of geocoding locations using the Geopy library depends on the quality and specificity of the location names provided in the incident reports. Ambiguous or incomplete location names may result in inaccurate geocoding.
+
+- **Weather Data Availability:** The script assumes that historical weather data is available for the specified locations and timestamps. Any gaps or inconsistencies in the weather data may affect the accuracy of the augmented data.
+
+- **Incident Report Consistency:** It is assumed that incident reports follow a consistent format across different sources. Any variations or inconsistencies in the format may require adjustments to the parsing logic.
+
+- **Data Privacy:** The script assumes that incident reports do not contain sensitive or personally identifiable information. Users should ensure compliance with data privacy regulations when using the script with real-world data.
 
 
+## Resources
+- A collection of Model Cards and Data Sheets: [[Link to resource](https://www.normanok.gov/public-safety/police-department/crime-prevention-data/department-activity-reports)]
+- Historical Weather API: [[Link to OpenWeatherMap API documentation](https://openweathermap.org/api)]

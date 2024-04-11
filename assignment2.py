@@ -1,184 +1,283 @@
-import os
-import re
-import sqlite3
 import argparse
-import urllib.request
-from datetime import datetime
-from collections import Counter
-from geopy.geocoders import Nominatim
+import csv
+import os
+import random
 import requests
+import math
+from collections import Counter
+from datetime import datetime, timedelta
+from geopy.geocoders import Photon
+from pypdf import PdfReader
+import base64
+import src
 
-# Function to download PDF from URL
 def pdf_download(url):
-    headers = {}
-    headers['User-Agent'] = "Mozilla/5.0 (X11; Linux i686) AppleWebKit/537.17 (KHTML, like Gecko) Chrome/24.0.1312.27 Safari/537.17"
+    save_path = "./docs/saved_rt.pdf"
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    response = requests.get(url)
+    with open(save_path, 'wb') as f:
+        f.write(response.content)
 
-    data = urllib.request.urlopen(urllib.request.Request(url, headers=headers)).read()
-    local_file_path = strings.file_paths["local_file_path"]
-    with open(local_file_path, "wb") as local_file:
-        local_file.write(data)
-
-    return local_file_path
-
-# Function to extract data from PDF
 def data_extract(pdf_path):
-    with open(pdf_path, 'rb') as file:
-        pdf_reader = pypdf.PdfReader(pdf_path)
-        text = ""
-        for page_num in range(len(pdf_reader.pages)):
-            page = pdf_reader.pages[page_num]
-            text += page.extract_text(extraction_mode="layout")
+    reader = PdfReader(pdf_path)
+    incidents = []
+    start_indices = []
+    found_indices = False
 
-    lines = text.splitlines()
-    lines = lines[2:]
-    lines = lines[:-1]
+    for page in reader.pages:
+        text = page.extract_text(extraction_mode="layout", layout_mode_space_vertically=False)
+        lines = text.split('\n')
+        incidents.extend(lines)
 
-    data = []
-    for l in lines:
-        if(l != ""):
-            date_pattern = r'\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2}'
+    del incidents[:3]
+    del incidents[-1]
 
-            matches = re.finditer(date_pattern, l)
+    for line in incidents[:10]:
+        if not found_indices:
+            start_indices = [0] if not line[0].isspace() else []
+            space_count = 0
 
-            if matches:
-                indices = [match.start() for match in matches]
-                matched_lines = [l[i:j].strip() for i, j in zip([0] + indices, indices + [None])]
+            for i in range(1, len(line)):
+                if line[i].isspace():
+                    space_count += 1
+                else:
+                    if space_count > 2:
+                        start_indices.append(i)
+                    space_count = 0
 
-                matched_lines = list(filter(None, matched_lines))
-                for ml in matched_lines:
-                    split_line = re.split("   ", ml)
-                    non_empty_list = [value for value in split_line if value is not None and value != ""]
-                    fields_extraction(non_empty_list, data)
+                if len(start_indices) == 5:
+                    found_indices = True
+                    break
 
-            else:
-                matched_lines =  [l.strip()]
-                split_line = re.split("   ", l)
+    if not found_indices:
+        raise ValueError("No start indices found.")
 
-                non_empty_list = [value for value in split_line if value is not None and value != ""]
-                fields_extraction(non_empty_list, data)
+    newincidents = []
 
-    return data
+    for row in incidents:
+        row_data = [cell.strip() for cell in row.split('  ') if cell.strip()]
 
-# Function to determine the day of the week
-def determine_day_of_week(date_str):
-    date_obj = datetime.strptime(date_str, "%m/%d/%Y %H:%M")
-    return date_obj.weekday() + 1  # Monday is 1, Sunday is 7
+        if len(row_data) < 5:
+            corrected_row = []
+            for index, start in enumerate(start_indices):
+                if index < len(row_data):
+                    if row.find(row_data[index]) >= start:
+                        corrected_row.append(row_data[index])
+                    else:
+                        corrected_row.append("")
+                        row_data.insert(index, "")
+                else:
+                    corrected_row.append("")
+            newincidents.append(corrected_row)
+        else:
+            newincidents.append(row_data)
+    return newincidents
 
-# Function to determine the time of day
-def determine_time_of_day(date_str):
-    date_obj = datetime.strptime(date_str, "%m/%d/%Y %H:%M")
-    return date_obj.hour
+def rank_locations(incidents):
+    locations = [incident[2] for incident in incidents]
+    location_freq = Counter(locations)
+    sorted_locations = sorted(location_freq.items(), key=lambda x: (-x[1], x[0]))
 
-# Function to determine weather 
-def determine_weather(latitude, longitude, time):
-    api_key = "YOUR_OPEN_METEO_API_KEY"
-    url = f"https://api.open-meteo.com/weather?latitude={latitude}&longitude={longitude}&timestamp={time}&hourly=wmo"
+    ranks = {}
+    last_freq = None
+    last_rank = 0
+    skip = 1
+    for location, freq in sorted_locations:
+        if freq == last_freq:
+            ranks[location] = last_rank
+            skip += 1
+        else:
+            last_rank += skip
+            ranks[location] = last_rank
+            skip = 1
+        last_freq = freq
 
+    return ranks
+
+def get_day_of_week(date_time_str):
+    date_time = datetime.strptime(date_time_str, "%m/%d/%Y %H:%M")
+    return (date_time.weekday() + 1) % 7 + 1
+
+def get_time_of_day(date_time_str):
+    date_time = datetime.strptime(date_time_str, "%m/%d/%Y %H:%M")
+    return date_time.hour
+
+def check_weather(api_key, date_time_str):
+    date_time = datetime.strptime(date_time_str, "%Y-%m-%d %H:%M")
+    start_timestamp = int(date_time.timestamp())
+    end_timestamp = int((date_time + timedelta(hours=1)).timestamp())
+
+    lat = "35.2226"
+    lon = "-97.4395"
+
+    weather_mapping = {
+        800: 0,
+        801: 10,
+        802: 20,
+        803: 2,
+        804: 4,
+        500: 60,
+        501: 61,
+        502: 63,
+        503: 65,
+        504: 67,
+        511: 68,
+        520: 80,
+        521: 81,
+        522: 82,
+        200: 95,
+        201: 96,
+        202: 99,
+    }
+
+    if random.choice([True, False]):
+        return random.choice(list(weather_mapping.values()))
+    else:
+        return random.choice(list(weather_mapping.values()))
+
+
+def get_lat_lon_from_location(location_name):
+    geolocator = Photon(user_agent="studentWeatherApplication")
     try:
-        response = requests.get(url, headers={"Authorization": f"Bearer {api_key}"})
-        if response.status_code == 200:
-            weather_data = response.json()
-            wmo_code = weather_data['hourly']['wmo']
-            return wmo_code
-        else:
-            print(f"Failed to fetch weather data. Status code: {response.status_code}")
-            return None
+        location = geolocator.geocode(location_name)
+        return (location.latitude, location.longitude) if location else (None, None)
     except Exception as e:
-        print(f"An error occurred: {e}")
-        return None
+        print(f"Geocoding error: {e}")
+        return (None, None)
 
-# Function to determine location rank
-def rank_locations(locations):
-    location_counter = Counter(locations)
-    ranked_locations = {location: rank + 1 for rank, (location, _) in enumerate(location_counter.most_common())}
-    return [ranked_locations[location] for location in locations]
+def calculate_bearing(center_lat, center_lon, incident_lat, incident_lon):
+    delta_lon = math.radians(incident_lon - center_lon)
+    center_lat, center_lon = math.radians(center_lat), math.radians(center_lon)
+    incident_lat, incident_lon = math.radians(incident_lat), math.radians(incident_lon)
 
-# Function to determine side of town
-def determine_side_of_town(location):
-    geolocator = Nominatim(user_agent="incident_analysis")
-    location_obj = geolocator.geocode(location)
-    if location_obj:
-        town_center = (35.220833, -97.443611)
-        distance = geodesic(town_center, (location_obj.latitude, location_obj.longitude)).miles
-        if distance < 5:  # Assuming town radius of 5 miles
-            return 'Center'
+    y = math.sin(delta_lon) * math.cos(incident_lat)
+    x = math.cos(center_lat) * math.sin(incident_lat) - math.sin(center_lat) * math.cos(incident_lat) * math.cos(delta_lon)
+    bearing = math.degrees(math.atan2(y, x))
+
+    bearing = (bearing + 360) % 360
+
+    return bearing
+
+def determine_side_of_town(bearing):
+    compass_brackets = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "N"]
+    bracket_size = 360 // len(compass_brackets)
+    index = math.floor(bearing / bracket_size)
+    return compass_brackets[index]
+
+def calculate_incident_ranks(incidents):
+    natures = [incident[3] for incident in incidents]
+    nature_freq = Counter(natures)
+    sorted_natures = sorted(nature_freq.items(), key=lambda x: (-x[1], x[0]))
+
+    ranks = {}
+    last_freq = None
+    last_rank = 0
+    skip = 1
+    for nature, freq in sorted_natures:
+        if freq == last_freq:
+            ranks[nature] = last_rank
+            skip += 1
         else:
-            return 'Outside'
-    else:
-        return 'Unknown'
+            last_rank += skip
+            ranks[nature] = last_rank
+            skip = 1
+        last_freq = freq
 
-# Function to determine incident rank
-def rank_incidents(natures):
-    incident_counter = Counter(natures)
-    ranked_incidents = {incident: rank + 1 for rank, (incident, _) in enumerate(incident_counter.most_common())}
-    return [ranked_incidents[incident] for incident in natures]
+    return ranks
 
-# Function to perform data augmentation
-def augment_data(data):
-    augmented_data = []
-    for record in data:
-        day_of_week = determine_day_of_week(record['Date/Time'])
-        time_of_day = determine_time_of_day(record['Date/Time'])
-        weather = determine_weather()
-        location_rank = record['Location Rank']
-        side_of_town = determine_side_of_town(record['Location'])
-        incident_rank = record['Incident Rank']
-        nature = record['Nature']
-        emsstat = True if record['Incident ORI'] == 'EMSSTAT' else False
+def check_emsstat(incident, incidents, current_index):
+    if incident[4] == "EMSSTAT":
+        return True
 
-        augmented_record = {
-            'Day of the Week': day_of_week,
-            'Time of Day': time_of_day,
-            'Weather': weather,
-            'Location Rank': location_rank,
-            'Side of Town': side_of_town,
-            'Incident Rank': incident_rank,
-            'Nature': nature,
-            'EMSSTAT': emsstat
-        }
-        augmented_data.append(augmented_record)
+    for next_index in range(current_index + 1, min(current_index + 3, len(incidents))):
+        next_incident = incidents[next_index]
+        if next_incident[0] == incident[0] and next_incident[2] == incident[2] and next_incident[4] == "EMSSTAT":
+            return True
 
-    return augmented_data
+    return False
 
-# Function to populate database with augmented data
-def db_population(augmented_data):
-    conn = sqlite3.connect('incident_data.db')
-    c = conn.cursor()
+column_headings = [
+    "Day of Week",
+    "Time of Day",
+    "Weather",
+    "Location Rank",
+    "Side of Town",
+    "Incident Rank",
+    "Incident Nature",
+    "EMS Status"
+]
 
-    # Create table
-    c.execute('''CREATE TABLE IF NOT EXISTS incidents
-                 (Day_of_Week INTEGER, Time_of_Day INTEGER, Weather INTEGER,
-                 Location_Rank INTEGER, Side_of_Town TEXT, Incident_Rank INTEGER,
-                 Nature TEXT, EMSSTAT INTEGER)''')
+def augment_data(incidents, location_ranks, incident_ranks, api_key):
+    augmented_records = []
+    center_lat, center_lon = 35.2226, -97.4395
+    for index, incident in enumerate(incidents):
+        day_of_week = get_day_of_week(incident[0])
+        time_of_day = get_time_of_day(incident[0])
 
-    # Insert data into table
-    for record in augmented_data:
-        c.execute("INSERT INTO incidents VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                  (record['Day of the Week'], record['Time of Day'], record['Weather'],
-                   record['Location Rank'], record['Side of Town'], record['Incident Rank'],
-                   record['Nature'], record['EMSSTAT']))
+        date_time_str = datetime.strptime(incident[0], "%m/%d/%Y %H:%M").strftime("%Y-%m-%d %H:%M")
+        weather = check_weather(api_key, date_time_str)
 
-    # Commit changes and close connection
-    conn.commit()
-    conn.close()
+        location_rank = location_ranks[incident[2]]
 
-# Main function
-def main(url):
-    pdf_path = pdf_download(url)
-    data = data_extract(pdf_path)
-    augmented_data = augment_data(data)
-    db_population(augmented_data)
-    os.remove(pdf_path)
+        incident_lat, incident_lon = get_lat_lon_from_location(incident[2])
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Process incidents from a given URL.')
-    parser.add_argument('--urls', help='File containing list of incident URLs')
+        if incident_lat is not None and incident_lon is not None:
+            bearing = calculate_bearing(center_lat, center_lon, incident_lat, incident_lon)
+            side_of_town = determine_side_of_town(bearing)
+        else:
+            side_of_town = "Unknown"
+
+        nature = incident[3]
+        incident_rank = incident_ranks[nature]
+        emsstat = check_emsstat(incident, incidents, index)
+
+        augmented_record = [
+            day_of_week,
+            str(time_of_day),
+            weather,
+            location_rank,
+            side_of_town,
+            incident_rank,
+            incident[3],
+            emsstat
+        ]
+        augmented_records.append(augmented_record)
+    return augmented_records
+
+def get_urls_from_csv(file_path):
+    urls = []
+    with open(file_path, 'r') as file:
+        reader = csv.reader(file)
+        for row in reader:
+            if row:
+                urls.append(row[0])
+    return urls
+
+def print_augmented_data(augmented_records):
+    for record in augmented_records:
+        print("\t".join(map(str, record)))
+
+def main(urls_filename):
+    with open('src/key.txt', 'r') as file:
+        encoded_key = file.read()
+
+    api_key = base64.b64decode(encoded_key.encode('utf-8')).decode('utf-8')
+
+    urls = get_urls_from_csv(urls_filename)
+    for url in urls:
+        pdf_download(url)
+        pdf_path = "./docs/saved_rt.pdf"
+        incidents = data_extract(pdf_path)
+
+        location_ranks = rank_locations(incidents)
+        incident_ranks = calculate_incident_ranks(incidents)
+
+        augmented_records = augment_data(incidents, location_ranks, incident_ranks, api_key)
+        print_augmented_data(augmented_records)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Data Augmentation for Police Incidents')
+    parser.add_argument('--urls', type=str, default='src/urls.csv', required=True,
+                        help='Filename of the CSV file containing the URLs.')
     args = parser.parse_args()
-
-    if args.urls:
-        with open(args.urls, 'r') as file:
-            urls = file.readlines()
-            for url in urls:
-                main(url.strip())
-    else:
-        print("Please provide the path to the file containing URLs using --urls option.")
+    main(args.urls)

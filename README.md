@@ -105,6 +105,26 @@ These test functions are located in the `tests/` directory and can be executed t
 ## Reliability 
 - **Reliability:** The script has undergone thorough testing to ensure its reliability. However, due to the complexity of real-world data, there may be unforeseen issues that could arise. Users are encouraged to test the script with their data and provide feedback for continuous improvement.
 
+## Bugs
+Here are some bugs and potential issues in the provided code:
+
+- **Non-Robust Error Handling**:
+   - The `pdf_download` function does not check the status code of the HTTP response, which can result in attempting to write non-PDF content if the URL is incorrect or the server responds with an error.
+   - The `data_extract` function assumes that the first page of the PDF will always have the correct format and sufficient data for processing, which might not be the case. It also deletes the first three and the last line of `incidents` unconditionally, which could result in errors if the data structure is different.
+
+- **Geocoding Overhead and Error Handling**:
+   - The `get_lat_lon_from_location` function could significantly slow down the execution due to real-time geocoding API calls. This might also hit rate limits if the dataset is large.
+   - There is a catch-all exception handling that does not specify what exceptions are expected, which is generally considered a bad practice because it can mask unexpected issues.
+
+- **PDF Text Extraction Assumptions**:
+   - The method of determining `start_indices` in `data_extract` relies on a specific number of spaces to find new data points, which is not reliable for different document layouts or formats. This could easily break with slightly different PDF structures.
+
+- **Data Integrity Check Missing**:
+   - There is no validation to ensure that each row extracted from the PDF (`newincidents`) meets the expected format before it is further processed. This could lead to unexpected errors during data augmentation if the rows are malformed.
+
+- **Inefficient Data Processing**:
+   - The function `augment_data` calls `get_lat_lon_from_location` for each incident even if the location is the same as a previous incident. Caching results for each unique location could improve performance significantly.
+
 ## Assumptions
 
 - **PDF Format:** The script assumes that the incident reports are in a standard PDF format and can be parsed using the `PyPDF2` library. Any deviations from this format may cause parsing errors.
